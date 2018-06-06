@@ -191,14 +191,14 @@ namespace Sacado {
        * May not intialize the coefficient array.
        */
       KOKKOS_INLINE_FUNCTION
-      Vector() = default;
+      constexpr Vector() = default;
 
       //! Constructor with supplied value \c x
       /*!
        * Sets size to 1 and first coefficient to x (represents a constant).
        */
       KOKKOS_INLINE_FUNCTION
-      Vector(const value_type& x) : s(1,x) {}
+      constexpr Vector(const value_type& x) : s(1,x) {}
 
       //! View constructor
       /*!
