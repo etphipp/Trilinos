@@ -343,11 +343,11 @@ public:
 
   //----------------------------------------
 
-  template < class CoeffFunctionType >
+  template < class CoeffFunctionType, class AdvectionFunctionType >
   void solve( const CoeffFunctionType & coeff_function
+            , const AdvectionFunctionType & advection_function
             , const bool isotropic
             , const double coeff_source
-            , const double coeff_advection
             , const double    bc_lower_value
             , const double    bc_upper_value
             , const unsigned  newton_iteration_limit
@@ -364,7 +364,7 @@ public:
             , Teuchos::Array<Scalar>& response_gradient
             )
     {
-      typedef ElementComputation< FixtureType , LocalMatrixType , CoeffFunctionType > ElementComputationType ;
+      typedef ElementComputation< FixtureType , LocalMatrixType , CoeffFunctionType, AdvectionFunctionType > ElementComputationType ;
       typedef DirichletComputation< FixtureType , LocalMatrixType > DirichletComputationType ;
       typedef ResponseComputation< FixtureType , LocalVectorType > ResponseComputationType ;
 
@@ -397,12 +397,10 @@ public:
                                          dev_config_bc );
 
       // Create element computation functor
-      const ElementComputationType elemcomp( fixture , coeff_function , isotropic ,
-                                             coeff_source , coeff_advection ,
-                                             nodal_solution ,
-                                             elem_graph ,
-                                             jacobian , nodal_residual ,
-                                             dev_config_elem , qd );
+      const ElementComputationType elemcomp(
+        fixture , coeff_function , advection_function , isotropic ,
+        coeff_source , nodal_solution , elem_graph , jacobian , nodal_residual ,
+        dev_config_elem , qd );
 
       // Create boundary condition functor
       // This also sets the boundary conditions in the solution vector
@@ -608,9 +606,11 @@ public:
 #ifdef HAVE_TRILINOSCOUPLINGS_SACADO
         typedef Sacado::Fad::SLFad<Scalar,10> FadType;
         typedef FadCoeffFunctionTraits<CoeffFunctionType, FadType> CoeffTraits;
+        typedef FadCoeffFunctionTraits<AdvectionFunctionType, FadType> AdvectionTraits;
         typedef typename CoeffTraits::type FadCoeffFunctionType;
+        typedef typename AdvectionTraits::type FadAdvectionFunctionType;
         typedef ParamSensitivityGatherScatterOp<LocalMultiVectorType> SensGatherScatter;
-        typedef ElementComputation< FixtureType , LocalMatrixType , FadCoeffFunctionType, SensGatherScatter, FadType > FadElementComputationType ;
+        typedef ElementComputation< FixtureType , LocalMatrixType , FadCoeffFunctionType, FadAdvectionFunctionType, SensGatherScatter, FadType > FadElementComputationType ;
 
         // Check sizes match
         TEUCHOS_TEST_FOR_EXCEPTION(
@@ -641,12 +641,14 @@ public:
 
         const FadCoeffFunctionType coeff_function_dp =
           CoeffTraits::eval(coeff_function);
+        const FadAdvectionFunctionType advection_function_dp =
+          AdvectionTraits::eval(advection_function);
 
         const SensGatherScatter gather_scatter(nodal_solution_dp,
                                                nodal_residual_dp);
         const FadElementComputationType elemcomp_dp(
-          fixture , coeff_function_dp , isotropic ,
-          coeff_source , coeff_advection ,
+          fixture , coeff_function_dp , advection_function_dp , isotropic ,
+          coeff_source ,
           nodal_solution ,
           elem_graph ,
           jacobian , nodal_residual ,
@@ -741,7 +743,7 @@ public:
 };
 
 template < class Scalar, class Device , BoxElemPart::ElemOrder ElemOrder,
-           class CoeffFunctionType >
+           class CoeffFunctionType, class AdvectionFunctionType >
 Perf fenl(
   Problem< Scalar, Device , ElemOrder >& problem,
   const Teuchos::RCP<Teuchos::ParameterList>& fenlParams,
@@ -752,9 +754,9 @@ Perf fenl(
   const int use_muelu ,
   const int use_mean_based ,
   const CoeffFunctionType& coeff_function ,
+  const AdvectionFunctionType& advection_function ,
   const bool isotropic,
   const double coeff_source ,
-  const double coeff_advection ,
   const double bc_lower_value ,
   const double bc_upper_value ,
   Scalar& response,
@@ -796,9 +798,9 @@ Perf fenl(
   for ( int itrial = 0 ; itrial < use_trials ; ++itrial ) {
 
     problem.solve( coeff_function
+                 , advection_function
                  , isotropic
                  , coeff_source
-                 , coeff_advection
                  , bc_lower_value
                  , bc_upper_value
                  , newton_iteration_limit
@@ -829,7 +831,7 @@ Perf fenl(
 }
 
 template < class Scalar, class Device , BoxElemPart::ElemOrder ElemOrder,
-           class CoeffFunctionType >
+           class CoeffFunctionType, class AdvectionFunctionType >
 Perf fenl(
   const Teuchos::RCP<const Teuchos::Comm<int> >& comm ,
   const Teuchos::RCP<  typename ::Kokkos::Compat::KokkosDeviceWrapperNode<Device> >& node,
@@ -842,9 +844,9 @@ Perf fenl(
   const int use_mean_based ,
   const int use_nodes[] ,
   const CoeffFunctionType& coeff_function ,
+  const AdvectionFunctionType& advection_function ,
   const bool isotropic,
   const double coeff_source ,
-  const double coeff_advection ,
   const double bc_lower_value ,
   const double bc_upper_value ,
   Scalar& response,
@@ -879,9 +881,9 @@ Perf fenl(
                use_muelu,
                use_mean_based,
                coeff_function,
+               advection_function,
                isotropic,
                coeff_source,
-               coeff_advection,
                bc_lower_value,
                bc_upper_value,
                response,

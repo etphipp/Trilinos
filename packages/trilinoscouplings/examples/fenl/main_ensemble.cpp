@@ -34,11 +34,13 @@
 
 //----------------------------------------------------------------------------
 
-template < class ProblemType, class CoeffFunctionType >
+template < class ProblemType, class CoeffFunctionType,
+           class AdvectionFunctionType >
 void run_samples(
   const Teuchos::Comm<int>& comm ,
   ProblemType& problem,
   CoeffFunctionType& coeff_function,
+  AdvectionFunctionType& advection_function,
   const Teuchos::RCP<Kokkos::Example::FENL::SampleGrouping<double> >& grouper,
   const Teuchos::RCP<Teuchos::ParameterList>& fenlParams,
   const CMD & cmd ,
@@ -53,30 +55,37 @@ void run_samples(
 {
   typedef typename CoeffFunctionType::RandomVariableView RV;
   typedef typename RV::HostMirror HRV;
-  const int dim = cmd.USE_UQ_DIM;
-  RV rv("KL Random Variables", dim);
-  HRV hrv = Kokkos::create_mirror_view(rv);
+  const int diff_dim = cmd.USE_DIFF_UQ_DIM;
+  const int adv_dim = cmd.USE_ADV_UQ_DIM;
+  RV diff_rv("Diffusion KL Random Variables", diff_dim);
+  RV adv_rv("Advection KL Random Variables", adv_dim);
+  HRV diff_hrv = Kokkos::create_mirror_view(diff_rv);
+  HRV adv_hrv = Kokkos::create_mirror_view(adv_rv);
 
   const int num_samples = points.size();
   for (int sample=0; sample<num_samples; ++sample) {
 
     // Set random variable values to this sample
-    for (int i=0; i<dim; ++i)
-      hrv(i) = points[sample][i];
-    Kokkos::deep_copy( rv, hrv );
-    coeff_function.setRandomVariables(rv);
+    for (int i=0; i<diff_dim; ++i)
+      diff_hrv(i) = points[sample][i];
+    for (int i=0; i<adv_dim; ++i)
+      adv_hrv(i) = points[sample][i+diff_dim];
+    Kokkos::deep_copy( diff_rv, diff_hrv );
+    Kokkos::deep_copy( adv_rv, adv_hrv );
+    coeff_function.setRandomVariables(diff_rv);
+    advection_function.setRandomVariables(adv_rv);
 
     // Evaluate response at quadrature point
     double response = 0;
     Teuchos::Array<double> response_gradient;
     if (response_gradients.size() > 0)
-      response_gradient.resize(dim);
+      response_gradient.resize(diff_dim+adv_dim);
     Kokkos::Example::FENL::Perf perf =
       fenl( problem , fenlParams ,
             cmd.PRINT , cmd.USE_TRIALS , cmd.USE_ATOMIC ,
             cmd.USE_BELOS , cmd.USE_MUELU , cmd.USE_MEANBASED ,
-            coeff_function , cmd.USE_ISOTROPIC ,
-            cmd.USE_COEFF_SRC , cmd.USE_COEFF_ADV ,
+            coeff_function , advection_function , cmd.USE_ISOTROPIC ,
+            cmd.USE_COEFF_SRC ,
             bc_lower_value , bc_upper_value ,
             response, response_gradient);
 
@@ -88,8 +97,10 @@ void run_samples(
 
     if (cmd.PRINT_ITS && 0 == comm.getRank()) {
       std::cout << sample << " : " << perf.cg_iter_count << " ( ";
-      for (int i=0; i<dim; ++i)
-        std::cout << hrv(i) << " ";
+      for (int i=0; i<diff_dim; ++i)
+        std::cout << diff_hrv(i) << " ";
+      for (int i=0; i<adv_dim; ++i)
+        std::cout << adv_hrv(i) << " ";
       std::cout << ")" << std::endl;
     }
 
@@ -102,11 +113,13 @@ void run_samples(
 template < class Storage,
            class Device ,
            Kokkos::Example::BoxElemPart::ElemOrder ElemOrder,
-           class CoeffFunctionType >
+           class CoeffFunctionType,
+           class AdvectionFunctionType >
 void run_samples(
   const Teuchos::Comm<int>& comm ,
   Kokkos::Example::FENL::Problem< Sacado::MP::Vector<Storage>, Device, ElemOrder>& problem ,
   CoeffFunctionType & coeff_function,
+  AdvectionFunctionType& advection_function,
   const Teuchos::RCP<Kokkos::Example::FENL::SampleGrouping<double> >& grouper,
   const Teuchos::RCP<Teuchos::ParameterList>& fenlParams,
   const CMD & cmd ,
@@ -133,31 +146,39 @@ void run_samples(
   grouper->group(VectorSize, points, groups, num_duplicate);
 
   const int num_groups = groups.size();
-  const int dim = cmd.USE_UQ_DIM;
-  RV rv("KL Random Variables", dim, VectorSize);
-  HRV hrv = Kokkos::create_mirror_view(rv);
+  const int diff_dim = cmd.USE_DIFF_UQ_DIM;
+  const int adv_dim = cmd.USE_ADV_UQ_DIM;
+  RV diff_rv("Diffusion KL Random Variables", diff_dim, VectorSize);
+  RV adv_rv("Advection KL Random Variables", adv_dim, VectorSize);
+  HRV diff_hrv = Kokkos::create_mirror_view(diff_rv);
+  HRV adv_hrv = Kokkos::create_mirror_view(adv_rv);
 
   // Loop over quadrature point groups
   for (int group=0; group<num_groups; ++group) {
 
     // Set random variables
-    for (int qp=0; qp<VectorSize; ++qp)
-      for (int i=0; i<dim; ++i)
-        hrv(i).fastAccessCoeff(qp) = points[groups[group][qp]][i];
-    Kokkos::deep_copy( rv, hrv );
-    coeff_function.setRandomVariables(rv);
+    for (int qp=0; qp<VectorSize; ++qp) {
+      for (int i=0; i<diff_dim; ++i)
+        diff_hrv(i).fastAccessCoeff(qp) = points[groups[group][qp]][i];
+      for (int i=0; i<adv_dim; ++i)
+        adv_hrv(i).fastAccessCoeff(qp) = points[groups[group][qp]][i+diff_dim];
+    }
+    Kokkos::deep_copy( diff_rv, diff_hrv );
+    Kokkos::deep_copy( adv_rv, adv_hrv );
+    coeff_function.setRandomVariables(diff_rv);
+    advection_function.setRandomVariables(adv_rv);
 
     // Evaluate response at quadrature point
     Scalar response = 0;
     Teuchos::Array<Scalar> response_gradient;
     if (response_gradients.size() > 0)
-      response_gradient.resize(dim);
+      response_gradient.resize(diff_dim+adv_dim);
     Kokkos::Example::FENL::Perf perf =
       fenl( problem , fenlParams ,
             cmd.PRINT , cmd.USE_TRIALS , cmd.USE_ATOMIC ,
             cmd.USE_BELOS , cmd.USE_MUELU , cmd.USE_MEANBASED ,
-            coeff_function , cmd.USE_ISOTROPIC ,
-            cmd.USE_COEFF_SRC , cmd.USE_COEFF_ADV ,
+            coeff_function , advection_function , cmd.USE_ISOTROPIC ,
+            cmd.USE_COEFF_SRC ,
             bc_lower_value , bc_upper_value ,
             response, response_gradient);
 
@@ -166,9 +187,12 @@ void run_samples(
     for (int qp=0; qp<VectorSize; ++qp) {
       responses[groups[group][qp]] = response.coeff(qp);
       if (response_gradients.size() > 0) {
-        for (int i=0; i<dim; ++i)
+        for (int i=0; i<diff_dim; ++i)
           response_gradients[groups[group][qp]][i] =
             response_gradient[i].coeff(qp);
+        for (int i=0; i<adv_dim; ++i)
+          response_gradients[groups[group][qp]][i+diff_dim] =
+            response_gradient[i+diff_dim].coeff(qp);
       }
       if (ensemble_it_size == VectorSize)
         iterations[groups[group][qp]] = perf.ensemble_cg_iter_count[qp];
@@ -184,8 +208,10 @@ void run_samples(
                   << iterations[groups[group][qp]] << ") ";
       std::cout << "]";
       std::cout << " ( ";
-      for (int i=0; i<dim; ++i)
-        std::cout << hrv(i) << " ";
+      for (int i=0; i<diff_dim; ++i)
+        std::cout << diff_hrv(i) << " ";
+      for (int i=0; i<adv_dim; ++i)
+        std::cout << adv_hrv(i) << " ";
       std::cout << ")" << std::endl;
     }
 
@@ -205,11 +231,13 @@ void run_samples(
   }
 }
 
-template< class ProblemType, class CoeffFunctionType >
+template< class ProblemType, class CoeffFunctionType,
+          class AdvectionFunctionType >
 void run_stokhos(
   const Teuchos::Comm<int>& comm ,
   ProblemType& problem ,
   CoeffFunctionType & coeff_function,
+  AdvectionFunctionType& advection_function,
   const Teuchos::RCP<Kokkos::Example::FENL::SampleGrouping<double> >& grouper,
   const Teuchos::RCP<Teuchos::ParameterList>& fenlParams,
   const CMD & cmd ,
@@ -227,7 +255,7 @@ void run_stokhos(
   typedef Stokhos::LexographicLess< Stokhos::MultiIndex<int> > order_type;
   typedef Stokhos::TotalOrderBasis<int,double,order_type> product_basis;
   typedef Stokhos::Quadrature<int,double> quadrature;
-  const int dim = cmd.USE_UQ_DIM ;
+  const int dim = cmd.USE_DIFF_UQ_DIM + cmd.USE_ADV_UQ_DIM;
   const int order = cmd.USE_UQ_ORDER ;
   Array< RCP<const one_d_basis> > bases(dim);
   for (int i=0; i<dim; i++)
@@ -276,7 +304,7 @@ void run_stokhos(
   Array<double> responses(num_quad_points);
   Array< Array<double> > response_gradients; // Can't use gradients
   Array<int> iterations(num_quad_points), ensemble_iterations(num_quad_points);
-  run_samples(comm, problem, coeff_function, grouper,
+  run_samples(comm, problem, coeff_function, advection_function, grouper,
               fenlParams, cmd,
               bc_lower_value, bc_upper_value,
               quad_points, responses, response_gradients,
@@ -325,7 +353,7 @@ void run_stokhos(
 #ifdef HAVE_TRILINOSCOUPLINGS_TRIKOTA
 namespace FENL {
 
-template <typename Problem, typename CoeffFunction>
+template <typename Problem, typename CoeffFunction, typename AdvectionFunction>
 class DirectApplicInterface : public Dakota::DirectApplicInterface {
 public:
 
@@ -335,6 +363,7 @@ public:
     const Teuchos::RCP<const Teuchos::Comm<int> >& comm_,
     const Teuchos::RCP<Problem>& problem_,
     const Teuchos::RCP<CoeffFunction>& coeff_function_,
+    const Teuchos::RCP<AdvectionFunction>& advection_function_,
     const Teuchos::RCP<Kokkos::Example::FENL::SampleGrouping<double> >& grpr_,
     const Teuchos::RCP<Teuchos::ParameterList>& fenlParams_,
     const Teuchos::RCP<const CMD>& cmd_,
@@ -345,6 +374,7 @@ public:
     comm(comm_),
     problem(problem_),
     coeff_function(coeff_function_),
+    advection_function(advection_function_),
     grouper(grpr_),
     fenlParams(fenlParams_),
     cmd(cmd_),
@@ -352,7 +382,7 @@ public:
     bc_lower_value(bc_lower_value_),
     bc_upper_value(bc_upper_value_)
   {
-    numParameters = cmd->USE_UQ_DIM;
+    numParameters = cmd->USE_DIFF_UQ_DIM + cmd->USE_ADV_UQ_DIM;
 
     // Check number of parameters is consistent
     Dakota::Model& first_model = *(problem_db_.model_list().begin());
@@ -391,7 +421,7 @@ protected:
       response_gradients[0].resize(numVars);
     }
     Array<int> iterations(1), ensemble_iterations(1);
-    run_samples(*comm, *problem, *coeff_function, grouper,
+    run_samples(*comm, *problem, *coeff_function, *advection_function, grouper,
                 fenlParams, *cmd,
                 bc_lower_value, bc_upper_value,
                 p, responses, response_gradients,
@@ -420,6 +450,7 @@ private:
   Teuchos::RCP<const Teuchos::Comm<int> > comm;
   Teuchos::RCP<Problem> problem;
   Teuchos::RCP<CoeffFunction> coeff_function;
+  Teuchos::RCP<AdvectionFunction> advection_function;
   Teuchos::RCP<Kokkos::Example::FENL::SampleGrouping<double> > grouper;
   Teuchos::RCP<Teuchos::ParameterList> fenlParams;
   Teuchos::RCP<const CMD> cmd;
@@ -432,11 +463,13 @@ private:
 }
 #endif
 
-template< class ProblemType, class CoeffFunctionType >
+template< class ProblemType, class CoeffFunctionType,
+          class AdvectionFunctionType >
 void run_dakota(
   const Teuchos::Comm<int>& comm ,
   ProblemType& problem ,
   CoeffFunctionType & coeff_function,
+  AdvectionFunctionType& advection_function,
   const Teuchos::RCP<Kokkos::Example::FENL::SampleGrouping<double> >& grouper,
   const Teuchos::RCP<Teuchos::ParameterList>& fenlParams,
   const CMD & cmd ,
@@ -465,6 +498,7 @@ void run_dakota(
       rcpFromRef(comm),
       rcpFromRef(problem),
       rcpFromRef(coeff_function),
+      rcpFromRef(advection_function),
       grouper,
       fenlParams,
       rcpFromRef(cmd),
@@ -529,11 +563,13 @@ private:
 };
 #endif
 
-template< class ProblemType, class CoeffFunctionType >
+template< class ProblemType, class CoeffFunctionType,
+          class AdvectionFunctionType >
 void run_tasmanian(
   const Teuchos::Comm<int>& comm ,
   ProblemType& problem ,
   CoeffFunctionType & coeff_function,
+  AdvectionFunctionType& advection_function,
   const Teuchos::RCP<Kokkos::Example::FENL::SampleGrouping<double> >& grouper,
   const Teuchos::RCP<Teuchos::ParameterList>& fenlParams,
   const CMD & cmd ,
@@ -549,7 +585,7 @@ void run_tasmanian(
   TasGrid::TasmanianSparseGrid sparseGrid;
 
   // Algorithmic parameters
-  const int dim = cmd.USE_UQ_DIM;
+  const int dim = cmd.USE_DIFF_UQ_DIM + cmd.USE_ADV_UQ_DIM;
   const int qoi = 3;
   const int initial_level = cmd.USE_UQ_INIT_LEVEL;
   const int max_level = cmd.USE_UQ_MAX_LEVEL;
@@ -607,7 +643,7 @@ void run_tasmanian(
     Array<double> responses(num_new_points);
     Array< Array<double> > response_gradients; // Can't use gradients
     Array<int> iterations(num_new_points), ensemble_iterations(num_new_points);
-    run_samples(comm, problem, coeff_function, grouper,
+    run_samples(comm, problem, coeff_function, advection_function, grouper,
                 fenlParams, cmd,
                 bc_lower_value, bc_upper_value,
                 quad_points, responses, response_gradients,
@@ -692,11 +728,13 @@ void run_tasmanian(
 #endif
 }
 
-template< class ProblemType, class CoeffFunctionType >
+template< class ProblemType, class CoeffFunctionType,
+          class AdvectionFunctionType >
 void run_file(
   const Teuchos::Comm<int>& comm ,
   ProblemType& problem ,
   CoeffFunctionType & coeff_function,
+  AdvectionFunctionType& advection_function,
   const Teuchos::RCP<Kokkos::Example::FENL::SampleGrouping<double> >& grouper,
   const Teuchos::RCP<Teuchos::ParameterList>& fenlParams,
   const CMD & cmd ,
@@ -706,7 +744,7 @@ void run_file(
 {
   using Teuchos::Array;
 
-  const int dim = cmd.USE_UQ_DIM;
+  const int dim = cmd.USE_DIFF_UQ_DIM + cmd.USE_ADV_UQ_DIM;
   int num_quad_points;
   Array< Array<double > > quad_points;
 
@@ -725,7 +763,7 @@ void run_file(
   Array<double> responses(num_quad_points);
   Array< Array<double> > response_gradients; // Can't use gradients yet
   Array<int> iterations(num_quad_points), ensemble_iterations(num_quad_points);
-  run_samples(comm, problem, coeff_function, grouper,
+  run_samples(comm, problem, coeff_function, advection_function, grouper,
               fenlParams, cmd,
               bc_lower_value, bc_upper_value,
               quad_points, responses, response_gradients,
@@ -746,11 +784,13 @@ void run_file(
   perf_total.response_std_dev = 0.0;
 }
 
-template< class ProblemType, class CoeffFunctionType >
+template< class ProblemType, class CoeffFunctionType,
+          class AdvectionFunctionType >
 void run_vps(
   const Teuchos::Comm<int>& comm ,
   ProblemType& problem ,
   CoeffFunctionType & coeff_function,
+  AdvectionFunctionType& advection_function,
   const Teuchos::RCP<Kokkos::Example::FENL::SampleGrouping<double> >& grouper,
   const Teuchos::RCP<Teuchos::ParameterList>& fenlParams,
   const CMD & cmd ,
@@ -760,7 +800,8 @@ void run_vps(
 {
   const unsigned ensemble_size =
     cmd.USE_UQ_ENSEMBLE > 0 ? cmd.USE_UQ_ENSEMBLE : 1;
-  EnsembleVPS vps(cmd.USE_UQ_DIM, cmd.USE_UQ_MAX_SAMPLES, ensemble_size,
+  EnsembleVPS vps(cmd.USE_DIFF_UQ_DIM+cmd.USE_ADV_UQ_DIM,
+                  cmd.USE_UQ_MAX_SAMPLES, ensemble_size,
                   comm.getRank());
   double mean, sd;
   vps.run(
@@ -777,7 +818,7 @@ void run_vps(
         for (size_t idim = 0; idim < dim; idim++)
           points[iSample][idim] = x[iSample][idim];
       }
-      run_samples(comm, problem, coeff_function, grouper,
+      run_samples(comm, problem, coeff_function, advection_function, grouper,
                   fenlParams, cmd,
                   bc_lower_value, bc_upper_value,
                   points, responses, response_gradients,
@@ -841,14 +882,25 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
   const double bc_upper_value = 2 ;
   const double geom_bubble[3] = { 1.0 , 1.0 , 1.0 };
 
-  const double kl_mean = cmd.USE_MEAN;
-  const double kl_variance = cmd.USE_VAR;
-  const double kl_correlation = cmd.USE_COR;
-  const int kl_dim = cmd.USE_UQ_DIM ;
-  const bool kl_exp = cmd.USE_EXPONENTIAL;
-  const double kl_exp_shift = cmd.USE_EXP_SHIFT;
-  const double kl_exp_scale = cmd.USE_EXP_SCALE;
-  const bool kl_disc_exp_scale = cmd.USE_DISC_EXP_SCALE;
+  // Diffusion coefficient KL parameters
+  const double diff_kl_mean = cmd.USE_DIFF_MEAN;
+  const double diff_kl_variance = cmd.USE_DIFF_VAR;
+  const double diff_kl_correlation = cmd.USE_DIFF_COR;
+  const int diff_kl_dim = cmd.USE_DIFF_UQ_DIM ;
+  const bool diff_kl_exp = cmd.USE_DIFF_EXPONENTIAL;
+  const double diff_kl_exp_shift = cmd.USE_DIFF_EXP_SHIFT;
+  const double diff_kl_exp_scale = cmd.USE_DIFF_EXP_SCALE;
+  const bool diff_kl_disc_exp_scale = cmd.USE_DIFF_DISC_EXP_SCALE;
+
+  // Advection coefficient KL parameters
+  const double adv_kl_mean = cmd.USE_ADV_MEAN;
+  const double adv_kl_variance = cmd.USE_ADV_VAR;
+  const double adv_kl_correlation = cmd.USE_ADV_COR;
+  const int adv_kl_dim = cmd.USE_ADV_UQ_DIM ;
+  const bool adv_kl_exp = cmd.USE_ADV_EXPONENTIAL;
+  const double adv_kl_exp_shift = cmd.USE_ADV_EXP_SHIFT;
+  const double adv_kl_exp_scale = cmd.USE_ADV_EXP_SCALE;
+  const bool adv_kl_disc_exp_scale = cmd.USE_ADV_DISC_EXP_SCALE;
 
   int nelem[3] = { cmd.USE_FIXTURE_X,
                    cmd.USE_FIXTURE_Y,
@@ -863,7 +915,7 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
   // Number of sensitivities -- currently only useful for Dakota
   unsigned num_sens = 0;
   if (cmd.USE_UQ_SAMPLING == SAMPLING_DAKOTA)
-    num_sens = kl_dim;
+    num_sens = diff_kl_dim + adv_kl_dim;
 
   // Compute PCE of response propagating blocks of quadrature
   // points at a time
@@ -876,9 +928,14 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
     Kokkos::global_sacado_mp_vector_size = VectorSize;
 
     typedef ExponentialKLCoefficient< Scalar, double, Device > KL;
-    KL diffusion_coefficient( kl_mean, kl_variance, kl_correlation, kl_dim,
-                              kl_exp, kl_exp_shift, kl_exp_scale,
-                              kl_disc_exp_scale );
+    KL diffusion_coefficient(
+      diff_kl_mean, diff_kl_variance, diff_kl_correlation, diff_kl_dim,
+      diff_kl_exp, diff_kl_exp_shift, diff_kl_exp_scale,
+      diff_kl_disc_exp_scale );
+    KL advection_coefficient(
+      adv_kl_mean, adv_kl_variance, adv_kl_correlation, adv_kl_dim,
+      adv_kl_exp, adv_kl_exp_shift, adv_kl_exp_scale,
+      adv_kl_disc_exp_scale );
 
     // Problem setup
     typedef Problem< Scalar, Device , BoxElemPart::ElemLinear > ProblemType;
@@ -891,8 +948,10 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
       grouper = rcp(new Kokkos::Example::FENL::NaturalGrouping<double>);
     else if (cmd.USE_GROUPING == GROUPING_MAX_ANISOTROPY) {
       typedef ExponentialKLCoefficient< double, double, Device > DKL;
-      DKL diff_coeff( kl_mean, kl_variance, kl_correlation, kl_dim,
-                      kl_exp, kl_exp_shift, kl_exp_scale, kl_disc_exp_scale );
+      DKL diff_coeff(
+        diff_kl_mean, diff_kl_variance, diff_kl_correlation, diff_kl_dim,
+        diff_kl_exp, diff_kl_exp_shift, diff_kl_exp_scale,
+        diff_kl_disc_exp_scale );
       typedef typename ProblemType::FixtureType Mesh;
       grouper =
         rcp(new Kokkos::Example::FENL::MaxAnisotropyGrouping<double,Mesh,DKL>(
@@ -908,19 +967,24 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
 #endif
 
     if (cmd.USE_UQ_SAMPLING == SAMPLING_STOKHOS)
-      run_stokhos(*comm, problem, diffusion_coefficient, grouper,
+      run_stokhos(*comm, problem, diffusion_coefficient, advection_coefficient,
+                  grouper,
                   fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
     else if (cmd.USE_UQ_SAMPLING == SAMPLING_DAKOTA)
-      run_dakota(*comm, problem, diffusion_coefficient, grouper,
+      run_dakota(*comm, problem, diffusion_coefficient, advection_coefficient,
+                 grouper,
                  fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
     else if (cmd.USE_UQ_SAMPLING == SAMPLING_TASMANIAN)
-      run_tasmanian(*comm, problem, diffusion_coefficient, grouper,
+      run_tasmanian(*comm, problem, diffusion_coefficient,
+                    advection_coefficient, grouper,
                     fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
     else if (cmd.USE_UQ_SAMPLING == SAMPLING_FILE)
-      run_file(*comm, problem, diffusion_coefficient, grouper,
+      run_file(*comm, problem, diffusion_coefficient, advection_coefficient,
+               grouper,
                fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
     else if (cmd.USE_UQ_SAMPLING == SAMPLING_VPS)
-      run_vps(*comm, problem, diffusion_coefficient, grouper,
+      run_vps(*comm, problem, diffusion_coefficient, advection_coefficient,
+              grouper,
               fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
 
   }
@@ -930,28 +994,38 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
 
     typedef double Scalar;
     typedef ExponentialKLCoefficient< Scalar, double, Device > KL;
-    KL diffusion_coefficient( kl_mean, kl_variance, kl_correlation, kl_dim,
-                              kl_exp, kl_exp_shift, kl_exp_scale,
-                              kl_disc_exp_scale);
+    KL diffusion_coefficient(
+      diff_kl_mean, diff_kl_variance, diff_kl_correlation, diff_kl_dim,
+      diff_kl_exp, diff_kl_exp_shift, diff_kl_exp_scale,
+      diff_kl_disc_exp_scale);
+     KL advection_coefficient(
+      adv_kl_mean, adv_kl_variance, adv_kl_correlation, adv_kl_dim,
+      adv_kl_exp, adv_kl_exp_shift, adv_kl_exp_scale,
+      adv_kl_disc_exp_scale);
 
     // Problem setup
     Problem< Scalar, Device , BoxElemPart::ElemLinear > problem(
       comm , node , nelem , geom_bubble , cmd.PRINT , num_sens );
 
     if (cmd.USE_UQ_SAMPLING == SAMPLING_STOKHOS)
-      run_stokhos(*comm, problem, diffusion_coefficient, Teuchos::null,
+      run_stokhos(*comm, problem, diffusion_coefficient, advection_coefficient,
+                  Teuchos::null,
                   fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
      else if (cmd.USE_UQ_SAMPLING == SAMPLING_DAKOTA)
-      run_dakota(*comm, problem, diffusion_coefficient, Teuchos::null,
+      run_dakota(*comm, problem, diffusion_coefficient, advection_coefficient,
+                 Teuchos::null,
                  fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
     else if (cmd.USE_UQ_SAMPLING == SAMPLING_TASMANIAN)
-      run_tasmanian(*comm, problem, diffusion_coefficient, Teuchos::null,
+      run_tasmanian(*comm, problem, diffusion_coefficient,
+                    advection_coefficient, Teuchos::null,
                     fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
     else if (cmd.USE_UQ_SAMPLING == SAMPLING_FILE)
-      run_file(*comm, problem, diffusion_coefficient, Teuchos::null,
+      run_file(*comm, problem, diffusion_coefficient, advection_coefficient,
+               Teuchos::null,
                fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
     else if (cmd.USE_UQ_SAMPLING == SAMPLING_VPS)
-      run_vps(*comm, problem, diffusion_coefficient, Teuchos::null,
+      run_vps(*comm, problem, diffusion_coefficient, advection_coefficient,
+              Teuchos::null,
               fenlParams, cmd, bc_lower_value, bc_upper_value, perf_total);
 
   }

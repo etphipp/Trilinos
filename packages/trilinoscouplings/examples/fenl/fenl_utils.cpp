@@ -72,7 +72,8 @@ clp_return_type parse_cmdline( int argc , char ** argv, CMD & cmdline,
 
   clp.setOption("sampling", &cmdline.USE_UQ_SAMPLING, num_sampling_types, sampling_values, sampling_names, "UQ sampling method");
   clp.setOption("uq-fake",                  &cmdline.USE_UQ_FAKE,  "setup a fake UQ problem of this size");
-  clp.setOption("uq-dim",                   &cmdline.USE_UQ_DIM,  "UQ dimension");
+  clp.setOption("diff-uq-dim",                   &cmdline.USE_DIFF_UQ_DIM,  "UQ dimension for diffusion");
+  clp.setOption("adv-uq-dim",                   &cmdline.USE_ADV_UQ_DIM,  "UQ dimension for advection");
   clp.setOption("uq-order",                 &cmdline.USE_UQ_ORDER,  "UQ order");
   clp.setOption("uq-init-level",            &cmdline.USE_UQ_INIT_LEVEL,  "Initial adaptive sparse grid level");
   clp.setOption("uq-max-level",             &cmdline.USE_UQ_MAX_LEVEL,  "Max adaptive sparse grid level");
@@ -80,14 +81,21 @@ clp_return_type parse_cmdline( int argc , char ** argv, CMD & cmdline,
   clp.setOption("uq-tol",                   &cmdline.USE_UQ_TOL,  "Adaptive sparse grid tolerance");
   clp.setOption("diff-coeff-linear",        &cmdline.USE_DIFF_COEFF_LINEAR,  "Linear term in diffusion coefficient");
   clp.setOption("diff-coeff-constant",      &cmdline.USE_DIFF_COEFF_CONSTANT,  "Constant term in diffusion coefficient");
-  clp.setOption("mean",                     &cmdline.USE_MEAN,  "KL diffusion mean");
-  clp.setOption("var",                      &cmdline.USE_VAR,  "KL diffusion variance");
-  clp.setOption("cor",                      &cmdline.USE_COR,  "KL diffusion correlation");
-  clp.setOption("exponential", "no-exponential", &cmdline.USE_EXPONENTIAL,  "take exponential of KL diffusion coefficient");
-  clp.setOption("exp-shift",                &cmdline.USE_EXP_SHIFT,  "Linear shift of exponential of KL diffusion coefficient");
-  clp.setOption("exp-scale",                &cmdline.USE_EXP_SCALE,  "Multiplicative scale of exponential of KL diffusion coefficient");
-  clp.setOption("discontinuous-exp-scale", "continuous-exp-scale", &cmdline.USE_DISC_EXP_SCALE,  "use discontinuous scale factor on exponential");
-  clp.setOption("isotropic", "anisotropic", &cmdline.USE_ISOTROPIC,  "use isotropic or anisotropic diffusion coefficient");
+  clp.setOption("diff-mean",                     &cmdline.USE_DIFF_MEAN,  "KL diffusion mean");
+  clp.setOption("diff-var",                      &cmdline.USE_DIFF_VAR,  "KL diffusion variance");
+  clp.setOption("diff-cor",                      &cmdline.USE_DIFF_COR,  "KL diffusion correlation");
+  clp.setOption("diff-exponential", "no-diff-exponential", &cmdline.USE_DIFF_EXPONENTIAL,  "take exponential of KL diffusion coefficient");
+  clp.setOption("diff-exp-shift",                &cmdline.USE_DIFF_EXP_SHIFT,  "Linear shift of exponential of KL diffusion coefficient");
+  clp.setOption("diff-exp-scale",                &cmdline.USE_DIFF_EXP_SCALE,  "Multiplicative scale of exponential of KL diffusion coefficient");
+  clp.setOption("diff-discontinuous-exp-scale", "diff-continuous-exp-scale", &cmdline.USE_DIFF_DISC_EXP_SCALE,  "use discontinuous scale factor on exponential");
+   clp.setOption("isotropic", "anisotropic", &cmdline.USE_ISOTROPIC,  "use isotropic or anisotropic diffusion coefficient");
+  clp.setOption("adv-mean",                     &cmdline.USE_ADV_MEAN,  "KL advection mean");
+  clp.setOption("adv-var",                      &cmdline.USE_ADV_VAR,  "KL advection variance");
+  clp.setOption("adv-cor",                      &cmdline.USE_ADV_COR,  "KL advection correlation");
+  clp.setOption("adv-exponential", "no-adv-exponential", &cmdline.USE_ADV_EXPONENTIAL,  "take exponential of KL advection coefficient");
+  clp.setOption("adv-exp-shift",                &cmdline.USE_ADV_EXP_SHIFT,  "Linear shift of exponential of KL advection coefficient");
+  clp.setOption("adv-exp-scale",                &cmdline.USE_ADV_EXP_SCALE,  "Multiplicative scale of exponential of KL advection coefficient");
+  clp.setOption("adv-discontinuous-exp-scale", "adv-continuous-exp-scale", &cmdline.USE_ADV_DISC_EXP_SCALE,  "use discontinuous scale factor on exponential");
   clp.setOption("coeff-src",                &cmdline.USE_COEFF_SRC,  "Coefficient for source term");
   clp.setOption("coeff-adv",                &cmdline.USE_COEFF_ADV,  "Coefficient for advection term");
   clp.setOption("sparse", "tensor",         &cmdline.USE_SPARSE ,  "use sparse or tensor grid");
@@ -185,8 +193,8 @@ void print_cmdline( std::ostream & s , const CMD & cmd )
   if ( cmd.USE_UQ_FAKE ) {
     s << " UQ fake(" << cmd.USE_UQ_FAKE  << ")" ;
   }
-  if ( cmd.USE_UQ_DIM  ) {
-    s << " UQ dimension(" << cmd.USE_UQ_DIM  << ")" ;
+  if ( cmd.USE_DIFF_UQ_DIM ) {
+    s << " UQ dimension(" << cmd.USE_DIFF_UQ_DIM  << ")" ;
   }
   if ( cmd.USE_UQ_ORDER  ) {
     s << " UQ order(" << cmd.USE_UQ_ORDER  << ")" ;
@@ -197,23 +205,23 @@ void print_cmdline( std::ostream & s , const CMD & cmd )
   if ( cmd.USE_DIFF_COEFF_CONSTANT ) {
     s << " Diffusion Coefficient B(" << cmd.USE_DIFF_COEFF_CONSTANT << ")" ;
   }
-  if ( cmd.USE_VAR  ) {
-    s << " KL variance(" << cmd.USE_VAR << ")" ;
+  if ( cmd.USE_DIFF_VAR  ) {
+    s << " KL variance(" << cmd.USE_DIFF_VAR << ")" ;
   }
-  if ( cmd.USE_MEAN  ) {
-    s << " KL mean(" << cmd.USE_MEAN << ")" ;
+  if ( cmd.USE_DIFF_MEAN  ) {
+    s << " KL mean(" << cmd.USE_DIFF_MEAN << ")" ;
   }
-  if ( cmd.USE_COR  ) {
-    s << " KL correlation(" << cmd.USE_COR << ")" ;
+  if ( cmd.USE_DIFF_COR  ) {
+    s << " KL correlation(" << cmd.USE_DIFF_COR << ")" ;
   }
-  if ( cmd.USE_EXPONENTIAL ) {
-    s << " KL exponential(" << cmd.USE_EXPONENTIAL << ")" ;
+  if ( cmd.USE_DIFF_EXPONENTIAL ) {
+    s << " KL exponential(" << cmd.USE_DIFF_EXPONENTIAL << ")" ;
   }
-  if ( cmd.USE_EXP_SHIFT ) {
-    s << " KL exponential shift(" << cmd.USE_EXP_SHIFT << ")" ;
+  if ( cmd.USE_DIFF_EXP_SHIFT ) {
+    s << " KL exponential shift(" << cmd.USE_DIFF_EXP_SHIFT << ")" ;
   }
-  if ( cmd.USE_EXP_SCALE ) {
-    s << " KL exponential scale(" << cmd.USE_EXP_SCALE << ")" ;
+  if ( cmd.USE_DIFF_EXP_SCALE ) {
+    s << " KL exponential scale(" << cmd.USE_DIFF_EXP_SCALE << ")" ;
   }
   if ( cmd.USE_ISOTROPIC ) {
     s << " isotropic" ;
@@ -309,21 +317,27 @@ print_headers( std::ostream & s , const CMD & cmd , const int comm_rank )
    if ( cmd.USE_MUELU  ) { s << " , USING MUELU" ; }
 
    if ( cmd.USE_UQ ) {
-     s << " , KL MEAN , " << cmd.USE_MEAN ;
-     s << " , KL VAR , " << cmd.USE_VAR ;
-     s << " , KL COR , " << cmd.USE_COR ;
-     s << " , KL EXP , " << cmd.USE_EXPONENTIAL ;
-     s << " , KL EXP SHIFT, " << cmd.USE_EXP_SHIFT ;
-     s << " , KL EXP SCALE, " << cmd.USE_EXP_SCALE ;
+     s << " , DIFF KL MEAN , " << cmd.USE_DIFF_MEAN ;
+     s << " , DIFF KL VAR , " << cmd.USE_DIFF_VAR ;
+     s << " , DIFF KL COR , " << cmd.USE_DIFF_COR ;
+     s << " , DIFF KL EXP , " << cmd.USE_DIFF_EXPONENTIAL ;
+     s << " , DIFF KL EXP SHIFT, " << cmd.USE_DIFF_EXP_SHIFT ;
+     s << " , DIFF KL EXP SCALE, " << cmd.USE_DIFF_EXP_SCALE ;
      if ( cmd.USE_ISOTROPIC )
        s << " ISOTROPIC" ;
      else
        s << " ANISOTROPIC" ;
+     s << " , ADV KL MEAN , " << cmd.USE_ADV_MEAN ;
+     s << " , ADV KL VAR , " << cmd.USE_ADV_VAR ;
+     s << " , ADV KL COR , " << cmd.USE_ADV_COR ;
+     s << " , ADV KL EXP , " << cmd.USE_ADV_EXPONENTIAL ;
+     s << " , ADV KL EXP SHIFT, " << cmd.USE_ADV_EXP_SHIFT ;
+     s << " , ADV KL EXP SCALE, " << cmd.USE_ADV_EXP_SCALE ;
      if ( cmd.USE_UQ_FAKE ) {
        s << " , UQ FAKE , " << cmd.USE_UQ_FAKE ;
      }
      else {
-       s << " , UQ DIM , " << cmd.USE_UQ_DIM ;
+       s << " , UQ DIM , " << cmd.USE_DIFF_UQ_DIM + cmd.USE_ADV_UQ_DIM ;
        s << " , UQ ORDER , " << cmd.USE_UQ_ORDER;
        if ( cmd.USE_SPARSE  ) { s << " , USING SPARSE GRID" ; }
        else { s << " , USING TENSOR GRID" ; }

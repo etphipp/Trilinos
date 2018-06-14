@@ -153,10 +153,23 @@ struct ExtractEnsembleIts<Sacado::MP::Vector<S>,V,O> {
 
   static std::vector<int>
   apply(const Belos::SolverManager<Sc,V,O>& solver) {
+    using Teuchos::RCP;
+    using Teuchos::rcp_dynamic_cast;
+
     const Belos::PseudoBlockCGSolMgr<Sc, V, O>* cg_solver =
       dynamic_cast<const Belos::PseudoBlockCGSolMgr<Sc, V, O>*>(&solver);
     if (cg_solver != 0)
       return cg_solver->getResidualStatusTest()->getEnsembleIterations();
+    const Belos::PseudoBlockGmresSolMgr<Sc, V, O>* gmres_solver =
+      dynamic_cast<const Belos::PseudoBlockGmresSolMgr<Sc, V, O>*>(&solver);
+    if (gmres_solver != 0) {
+      RCP<const Belos::StatusTestResNorm<Sc,V,O> > res_test =
+        gmres_solver->getImplicitResidualStatusTest();
+      RCP<const Belos::StatusTestImpResNorm<Sc,V,O> > imp_res_test =
+        rcp_dynamic_cast<const Belos::StatusTestImpResNorm<Sc,V,O> >(res_test,
+                                                                     true);
+      return imp_res_test->getEnsembleIterations();
+    }
     return std::vector<int>();
   }
 };

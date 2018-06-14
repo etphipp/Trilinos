@@ -667,11 +667,12 @@ template< typename ExecutionSpace ,
           typename OrdinalType ,
           typename MemoryTraits ,
           typename SizeType ,
-          class CoeffFunctionType>
+          class CoeffFunctionType,
+          class AdvectionFunctionType>
 class ElementComputation<
   Kokkos::Example::BoxElemFixture< ExecutionSpace , Order , CoordinateMap >,
   KokkosSparse::CrsMatrix< Sacado::UQ::PCE<StorageType> , OrdinalType , ExecutionSpace , MemoryTraits , SizeType >,
-  CoeffFunctionType >
+  CoeffFunctionType, AdvectionFunctionType >
 {
 public:
 
@@ -700,7 +701,7 @@ public:
   typedef ElementComputation<
     Kokkos::Example::BoxElemFixture< ExecutionSpace , Order , CoordinateMap >,
     KokkosSparse::CrsMatrix< ensemble_scalar_type , OrdinalType , ExecutionSpace , MemoryTraits , SizeType >,
-    scalar_coeff_function_type > scalar_element_computation_type;
+    scalar_coeff_function_type, AdvectionFunctionType > scalar_element_computation_type;
   typedef typename scalar_element_computation_type::sparse_matrix_type scalar_sparse_matrix_type ;
   typedef typename scalar_sparse_matrix_type::values_type scalar_matrix_values_type ;
   typedef typename scalar_element_computation_type::vector_type scalar_vector_type ;
@@ -742,9 +743,9 @@ public:
   // Otherwise fill per-element contributions for subequent gather-add into a residual and jacobian.
   ElementComputation( const mesh_type          & arg_mesh ,
                       const CoeffFunctionType  & arg_coeff_function ,
+                      const AdvectionFunctionType  & arg_advection_function ,
                       const bool                 arg_isotropic ,
                       const double             & arg_coeff_source ,
-                      const double             & arg_coeff_advection ,
                       const vector_type        & arg_solution ,
                       const elem_graph_type    & arg_elem_graph ,
                       const sparse_matrix_type & arg_jacobian ,
@@ -767,9 +768,9 @@ public:
                                     arg_coeff_function.m_use_disc_exp_scale )
     , scalar_element_computation( arg_mesh,
                                   scalar_diffusion_coefficient,
+                                  arg_advection_function,
                                   arg_isotropic,
                                   arg_coeff_source,
-                                  arg_coeff_advection,
                                   scalar_solution,
                                   arg_elem_graph,
                                   scalar_jacobian,

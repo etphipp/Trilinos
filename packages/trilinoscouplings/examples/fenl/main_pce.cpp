@@ -44,7 +44,7 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
   typedef Stokhos::TotalOrderBasis<int,double,order_type> product_basis;
   typedef Stokhos::Sparse3Tensor<int,double> Cijk;
   typedef Stokhos::Quadrature<int,double> quadrature;
-  const int dim = cmd.USE_UQ_DIM;
+  const int dim = cmd.USE_DIFF_UQ_DIM;
   const int order = cmd.USE_UQ_ORDER ;
   Array< RCP<const one_d_basis> > bases(dim);
   for (int i=0; i<dim; i++)
@@ -120,6 +120,7 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
 
   using Kokkos::Example::FENL::ElementComputationKLCoefficient;
   using Kokkos::Example::FENL::ExponentialKLCoefficient;
+  using Kokkos::Example::FENL::ElementComputationConstantCoefficient;
   using Kokkos::Example::BoxElemPart;
   using Kokkos::Example::FENL::fenl;
   using Kokkos::Example::FENL::Perf;
@@ -131,14 +132,18 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
                    cmd.USE_FIXTURE_Y  ,
                    cmd.USE_FIXTURE_Z  };
 
+  // Create advection coefficient
+  ElementComputationConstantCoefficient
+    advection_coefficient( cmd.USE_COEFF_ADV );
+
   // Create KL diffusion coefficient
-  const double kl_mean = cmd.USE_MEAN;
-  const double kl_variance = cmd.USE_VAR;
-  const double kl_correlation = cmd.USE_COR;
-  const bool kl_exp = cmd.USE_EXPONENTIAL;
-  const double kl_exp_shift = cmd.USE_EXP_SHIFT;
-  const double kl_exp_scale = cmd.USE_EXP_SCALE;
-  const bool kl_disc_exp_scale = cmd.USE_DISC_EXP_SCALE;
+  const double kl_mean = cmd.USE_DIFF_MEAN;
+  const double kl_variance = cmd.USE_DIFF_VAR;
+  const double kl_correlation = cmd.USE_DIFF_COR;
+  const bool kl_exp = cmd.USE_DIFF_EXPONENTIAL;
+  const double kl_exp_shift = cmd.USE_DIFF_EXP_SHIFT;
+  const double kl_exp_scale = cmd.USE_DIFF_EXP_SCALE;
+  const bool kl_disc_exp_scale = cmd.USE_DIFF_DISC_EXP_SCALE;
   //typedef ElementComputationKLCoefficient< Scalar, double, Device > KL;
   typedef ExponentialKLCoefficient< Scalar, double, Device > KL;
   KL diffusion_coefficient( kl_mean, kl_variance, kl_correlation, dim,
@@ -177,8 +182,9 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
         cmd.PRINT , cmd.USE_TRIALS ,
         cmd.USE_ATOMIC , cmd.USE_BELOS , cmd.USE_MUELU ,
         cmd.USE_MEANBASED ,
-        nelem , diffusion_coefficient , cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
-        cmd.USE_COEFF_ADV , bc_lower_value , bc_upper_value ,
+        nelem , diffusion_coefficient , advection_coefficient ,
+        cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
+        bc_lower_value , bc_upper_value ,
         response, response_gradient, qd );
   else
     perf = fenl< Scalar , Device , BoxElemPart::ElemLinear >
@@ -186,8 +192,9 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
         cmd.PRINT , cmd.USE_TRIALS ,
         cmd.USE_ATOMIC , cmd.USE_BELOS , cmd.USE_MUELU ,
         cmd.USE_MEANBASED ,
-        nelem , diffusion_coefficient , cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
-        cmd.USE_COEFF_ADV , bc_lower_value , bc_upper_value ,
+        nelem , diffusion_coefficient , advection_coefficient ,
+        cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
+        bc_lower_value , bc_upper_value ,
         response , response_gradient, qd );
 
   // std::cout << "newton count = " << perf.newton_iter_count

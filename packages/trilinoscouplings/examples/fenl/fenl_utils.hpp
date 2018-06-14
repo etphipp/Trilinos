@@ -54,7 +54,8 @@ struct CMD {
   bool USE_UQ;
   SamplingType USE_UQ_SAMPLING;
   int USE_UQ_FAKE;
-  int USE_UQ_DIM;
+  int USE_DIFF_UQ_DIM;
+  int USE_ADV_UQ_DIM;
   int USE_UQ_ORDER;
   int USE_UQ_INIT_LEVEL;
   int USE_UQ_MAX_LEVEL;
@@ -62,14 +63,21 @@ struct CMD {
   double USE_UQ_TOL;
   double USE_DIFF_COEFF_LINEAR;
   double USE_DIFF_COEFF_CONSTANT;
-  double USE_MEAN;
-  double USE_VAR;
-  double USE_COR;
-  bool USE_EXPONENTIAL;
-  double USE_EXP_SHIFT;
-  double USE_EXP_SCALE;
-  bool USE_DISC_EXP_SCALE;
+  double USE_DIFF_MEAN;
+  double USE_DIFF_VAR;
+  double USE_DIFF_COR;
+  bool USE_DIFF_EXPONENTIAL;
+  double USE_DIFF_EXP_SHIFT;
+  double USE_DIFF_EXP_SCALE;
+  bool USE_DIFF_DISC_EXP_SCALE;
   bool USE_ISOTROPIC;
+  double USE_ADV_MEAN;
+  double USE_ADV_VAR;
+  double USE_ADV_COR;
+  bool USE_ADV_EXPONENTIAL;
+  double USE_ADV_EXP_SHIFT;
+  double USE_ADV_EXP_SCALE;
+  bool USE_ADV_DISC_EXP_SCALE;
   double USE_COEFF_SRC;
   double USE_COEFF_ADV;
   bool USE_SPARSE;
@@ -106,7 +114,8 @@ struct CMD {
           USE_UQ(false),
           USE_UQ_SAMPLING(SAMPLING_STOKHOS),
           USE_UQ_FAKE(0),
-          USE_UQ_DIM(3),
+          USE_DIFF_UQ_DIM(3),
+          USE_ADV_UQ_DIM(0),
           USE_UQ_ORDER(2),
           USE_UQ_INIT_LEVEL(1),
           USE_UQ_MAX_LEVEL(7),
@@ -114,14 +123,21 @@ struct CMD {
           USE_UQ_TOL(1e-2),
           USE_DIFF_COEFF_LINEAR(0.0),
           USE_DIFF_COEFF_CONSTANT(1.0),
-          USE_MEAN(1),
-          USE_VAR(0.1),
-          USE_COR(0.25),
-          USE_EXPONENTIAL(false),
-          USE_EXP_SHIFT(1.0),
-          USE_EXP_SCALE(1.0),
-          USE_DISC_EXP_SCALE(false),
+          USE_DIFF_MEAN(1),
+          USE_DIFF_VAR(0.1),
+          USE_DIFF_COR(0.25),
+          USE_DIFF_EXPONENTIAL(false),
+          USE_DIFF_EXP_SHIFT(1.0),
+          USE_DIFF_EXP_SCALE(1.0),
+          USE_DIFF_DISC_EXP_SCALE(false),
           USE_ISOTROPIC(true),
+          USE_ADV_MEAN(0.0),
+          USE_ADV_VAR(0.0),
+          USE_ADV_COR(1.0),
+          USE_ADV_EXPONENTIAL(false),
+          USE_ADV_EXP_SHIFT(1.0),
+          USE_ADV_EXP_SCALE(1.0),
+          USE_ADV_DISC_EXP_SCALE(false),
           USE_COEFF_SRC(1.0),
           USE_COEFF_ADV(0.0),
           USE_SPARSE(false),

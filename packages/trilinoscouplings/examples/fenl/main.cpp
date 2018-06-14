@@ -33,6 +33,7 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
     print_headers( std::cout , cmd , comm_rank );
 
   using Kokkos::Example::FENL::ElementComputationLinearCoefficient;
+  using Kokkos::Example::FENL::ElementComputationConstantCoefficient;
   using Kokkos::Example::BoxElemPart;
   using Kokkos::Example::FENL::fenl;
   using Kokkos::Example::FENL::Perf;
@@ -43,6 +44,8 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
   ElementComputationLinearCoefficient
     linear_diffusion_coefficient( cmd.USE_DIFF_COEFF_LINEAR ,
                                   cmd.USE_DIFF_COEFF_CONSTANT );
+  ElementComputationConstantCoefficient
+    constant_advection_coefficient( cmd.USE_COEFF_ADV );
 
   int nelem[3] = { cmd.USE_FIXTURE_X  ,
                    cmd.USE_FIXTURE_Y  ,
@@ -57,8 +60,9 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
         cmd.PRINT , cmd.USE_TRIALS ,
         cmd.USE_ATOMIC , cmd.USE_BELOS , cmd.USE_MUELU ,
         cmd.USE_MEANBASED ,
-        nelem , linear_diffusion_coefficient, cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
-        cmd.USE_COEFF_ADV , bc_lower_value , bc_upper_value ,
+        nelem , linear_diffusion_coefficient , constant_advection_coefficient ,
+        cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
+        bc_lower_value , bc_upper_value ,
         response , response_gradient );
   }
   else {
@@ -67,8 +71,9 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
         cmd.PRINT , cmd.USE_TRIALS ,
         cmd.USE_ATOMIC , cmd.USE_BELOS , cmd.USE_MUELU ,
         cmd.USE_MEANBASED ,
-        nelem , linear_diffusion_coefficient, cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
-        cmd.USE_COEFF_ADV , bc_lower_value , bc_upper_value ,
+        nelem , linear_diffusion_coefficient , constant_advection_coefficient,
+        cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
+        bc_lower_value , bc_upper_value ,
         response , response_gradient );
   }
 

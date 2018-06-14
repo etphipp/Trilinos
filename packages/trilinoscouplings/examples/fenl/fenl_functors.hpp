@@ -494,6 +494,7 @@ struct LocalGatherScatterTraits<
 template< class FiniteElementMeshType
         , class SparseMatrixType
         , class CoeffFunctionType = ElementComputationConstantCoefficient
+        , class AdvectionFunctionType = ElementComputationConstantCoefficient
         , class GatherScatterOp = DefaultGatherScatterOp
         , class ScalarType = typename SparseMatrixType::value_type
         >
@@ -502,11 +503,12 @@ class ElementComputation ;
 
 template< class ExecutionSpace , BoxElemPart::ElemOrder Order , class CoordinateMap ,
           typename MatrixVectorScalarType , typename OrdinalType , class MemoryTraits , typename SizeType ,
-          class CoeffFunctionType , class GatherScatterOp , class ScalarType >
+          class CoeffFunctionType , class AdvectionFunctionType, class GatherScatterOp , class ScalarType >
 class ElementComputation
   < Kokkos::Example::BoxElemFixture< ExecutionSpace , Order , CoordinateMap >
   , KokkosSparse::CrsMatrix< MatrixVectorScalarType , OrdinalType , ExecutionSpace , MemoryTraits , SizeType >
   , CoeffFunctionType
+  , AdvectionFunctionType
   , GatherScatterOp
   , ScalarType >
 {
@@ -565,9 +567,9 @@ public:
   const GatherScatterOp     gather_scatter ;
   const bool                assemble_jacobian ;
   const CoeffFunctionType   coeff_function ;
+  const AdvectionFunctionType advection_function ;
   const bool                isotropic ;
   const double              coeff_source ;
-  const double              coeff_advection ;
   const KokkosSparse::DeviceConfig dev_config ;
 
   ElementComputation( const ElementComputation & rhs )
@@ -581,9 +583,9 @@ public:
     , gather_scatter( rhs.gather_scatter )
     , assemble_jacobian( rhs.assemble_jacobian )
     , coeff_function( rhs.coeff_function )
+    , advection_function( rhs.advection_function )
     , isotropic( rhs.isotropic )
     , coeff_source( rhs.coeff_source )
-    , coeff_advection( rhs.coeff_advection )
     , dev_config( rhs.dev_config )
     {}
 
@@ -591,9 +593,9 @@ public:
   // Otherwise fill per-element contributions for subequent gather-add into a residual and jacobian.
   ElementComputation( const mesh_type          & arg_mesh ,
                       const CoeffFunctionType  & arg_coeff_function ,
+                      const AdvectionFunctionType  & arg_advection_function ,
                       const bool                 arg_isotropic ,
                       const double             & arg_coeff_source ,
-                      const double             & arg_coeff_advection ,
                       const vector_type        & arg_solution ,
                       const elem_graph_type    & arg_elem_graph ,
                       const sparse_matrix_type & arg_jacobian ,
@@ -614,9 +616,9 @@ public:
     , gather_scatter( arg_gather_scatter )
     , assemble_jacobian( arg_assemble_jacobian )
     , coeff_function( arg_coeff_function )
+    , advection_function( arg_advection_function )
     , isotropic( arg_isotropic )
     , coeff_source( arg_coeff_source )
-    , coeff_advection( arg_coeff_advection )
     , dev_config( arg_dev_config )
     {}
 
@@ -728,7 +730,7 @@ public:
     const double  bases_vals[] ,
     const local_scalar_type  coeff_k ,
     const double  coeff_src ,
-    const double  advection[] ,
+    const local_scalar_type  advection[] ,
     local_scalar_type  elem_res[] ,
     local_scalar_type  elem_mat[][ FunctionCount ] ) const
   {
@@ -796,7 +798,7 @@ public:
     const double  bases_vals[] ,
     const local_scalar_type  coeff_k ,
     const double  coeff_src ,
-    const double  advection[] ,
+    const local_scalar_type  advection[] ,
     local_scalar_type  elem_res[] ,
     local_scalar_type  elem_mat[][ FunctionCount ] ) const
   {
@@ -924,11 +926,6 @@ public:
       }
     }
 
-    // advection = [ 1 , 1 , 1 ] * coeff_advection
-    double advection[] = { coeff_advection ,
-                           coeff_advection ,
-                           coeff_advection };
-
     for ( unsigned i = 0 ; i < IntegrationCount ; ++i ) {
       double dpsidx[ FunctionCount ] ;
       double dpsidy[ FunctionCount ] ;
@@ -948,6 +945,13 @@ public:
 
       // Evaluate diffusion coefficient
       local_scalar_type coeff_k = coeff_function(pt, ensemble_rank);
+
+      // Evaluate advection coefficient
+      // advection = [ 1 , 1 , 1 ] * coeff_advection
+      local_scalar_type coeff_advection = advection_function(pt, ensemble_rank);
+      local_scalar_type advection[] = { coeff_advection ,
+                                        coeff_advection ,
+                                        coeff_advection };
 
       if (isotropic)
         contributeResidualJacobian( val , dpsidx , dpsidy , dpsidz , detJ ,
