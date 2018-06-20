@@ -84,6 +84,7 @@ struct CMD {
   int USE_UQ_ENSEMBLE;
   GroupingType USE_GROUPING;
   int TAS_GROUPING_INITIAL_LEVEL;
+  bool USE_SUPG;
   bool VTUNE;
   bool VERBOSE;
   bool PRINT;
@@ -144,6 +145,7 @@ struct CMD {
           USE_UQ_ENSEMBLE(0),
           USE_GROUPING(GROUPING_NATURAL),
           TAS_GROUPING_INITIAL_LEVEL(2),
+          USE_SUPG(false),
           VTUNE(false),
           VERBOSE(false),
           PRINT(false),

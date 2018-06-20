@@ -348,6 +348,7 @@ public:
             , const AdvectionFunctionType & advection_function
             , const bool isotropic
             , const double coeff_source
+            , const bool supg
             , const double    bc_lower_value
             , const double    bc_upper_value
             , const unsigned  newton_iteration_limit
@@ -399,8 +400,8 @@ public:
       // Create element computation functor
       const ElementComputationType elemcomp(
         fixture , coeff_function , advection_function , isotropic ,
-        coeff_source , nodal_solution , elem_graph , jacobian , nodal_residual ,
-        dev_config_elem , qd );
+        coeff_source , supg , nodal_solution , elem_graph , jacobian ,
+        nodal_residual , dev_config_elem , qd );
 
       // Create boundary condition functor
       // This also sets the boundary conditions in the solution vector
@@ -648,7 +649,7 @@ public:
                                                nodal_residual_dp);
         const FadElementComputationType elemcomp_dp(
           fixture , coeff_function_dp , advection_function_dp , isotropic ,
-          coeff_source ,
+          coeff_source , supg ,
           nodal_solution ,
           elem_graph ,
           jacobian , nodal_residual ,
@@ -739,6 +740,30 @@ public:
 
       Device::fence();
       perf.newton_total_time = newton_clock.seconds();
+
+      /*
+      // Save solution to file
+      bool save = true;
+      if (save) {
+        std::string fname = "fenl_solution.dat.";
+        fname += std::to_string(comm->getRank());
+        std::ofstream out(fname);
+        out.precision(14);
+        out.setf(std::ios_base::scientific);
+        g_nodal_solution.template sync<Kokkos::HostSpace>();
+        auto nodal_solution =
+          g_nodal_solution.template getLocalView<Kokkos::HostSpace>();
+        typename FixtureType::node_coord_type::HostMirror node_coords =
+          Kokkos::create_mirror_view(fixture.node_coord());
+        Kokkos::deep_copy( node_coords, fixture.node_coord() );
+        const size_t n = node_coords.extent(0);
+        for (size_t i=0; i<n; ++i) {
+          for (size_t j=0; j<3; ++j)
+            out << node_coords(i,j) << " ";
+          out << nodal_solution(i,0) << std::endl;
+        }
+      }
+      */
     }
 };
 
@@ -757,6 +782,7 @@ Perf fenl(
   const AdvectionFunctionType& advection_function ,
   const bool isotropic,
   const double coeff_source ,
+  const bool supg ,
   const double bc_lower_value ,
   const double bc_upper_value ,
   Scalar& response,
@@ -801,6 +827,7 @@ Perf fenl(
                  , advection_function
                  , isotropic
                  , coeff_source
+                 , supg
                  , bc_lower_value
                  , bc_upper_value
                  , newton_iteration_limit
@@ -847,6 +874,7 @@ Perf fenl(
   const AdvectionFunctionType& advection_function ,
   const bool isotropic,
   const double coeff_source ,
+  const bool supg ,
   const double bc_lower_value ,
   const double bc_upper_value ,
   Scalar& response,
@@ -884,6 +912,7 @@ Perf fenl(
                advection_function,
                isotropic,
                coeff_source,
+               supg,
                bc_lower_value,
                bc_upper_value,
                response,

@@ -183,7 +183,7 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
         cmd.USE_ATOMIC , cmd.USE_BELOS , cmd.USE_MUELU ,
         cmd.USE_MEANBASED ,
         nelem , diffusion_coefficient , advection_coefficient ,
-        cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
+        cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC , cmd.USE_SUPG ,
         bc_lower_value , bc_upper_value ,
         response, response_gradient, qd );
   else
@@ -193,7 +193,7 @@ bool run( const Teuchos::RCP<const Teuchos::Comm<int> > & comm ,
         cmd.USE_ATOMIC , cmd.USE_BELOS , cmd.USE_MUELU ,
         cmd.USE_MEANBASED ,
         nelem , diffusion_coefficient , advection_coefficient ,
-        cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC ,
+        cmd.USE_ISOTROPIC , cmd.USE_COEFF_SRC , cmd.USE_SUPG ,
         bc_lower_value , bc_upper_value ,
         response , response_gradient, qd );
 

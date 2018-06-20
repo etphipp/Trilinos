@@ -570,6 +570,7 @@ public:
   const AdvectionFunctionType advection_function ;
   const bool                isotropic ;
   const double              coeff_source ;
+  const bool                supg ;
   const KokkosSparse::DeviceConfig dev_config ;
 
   ElementComputation( const ElementComputation & rhs )
@@ -586,6 +587,7 @@ public:
     , advection_function( rhs.advection_function )
     , isotropic( rhs.isotropic )
     , coeff_source( rhs.coeff_source )
+    , supg( rhs.supg )
     , dev_config( rhs.dev_config )
     {}
 
@@ -596,6 +598,7 @@ public:
                       const AdvectionFunctionType  & arg_advection_function ,
                       const bool                 arg_isotropic ,
                       const double             & arg_coeff_source ,
+                      const bool               & arg_supg ,
                       const vector_type        & arg_solution ,
                       const elem_graph_type    & arg_elem_graph ,
                       const sparse_matrix_type & arg_jacobian ,
@@ -619,6 +622,7 @@ public:
     , advection_function( arg_advection_function )
     , isotropic( arg_isotropic )
     , coeff_source( arg_coeff_source )
+    , supg( arg_supg )
     , dev_config( arg_dev_config )
     {}
 
@@ -649,7 +653,8 @@ public:
     const double z[] ,
     double dpsidx[] ,
     double dpsidy[] ,
-    double dpsidz[] ) const
+    double dpsidz[] ,
+    double Gc[3][3]) const
   {
     enum { j11 = 0 , j12 = 1 , j13 = 2 ,
            j21 = 3 , j22 = 4 , j23 = 5 ,
@@ -716,7 +721,38 @@ public:
       dpsidz[i] = g0 * invJ[j31] + g1 * invJ[j32] + g2 * invJ[j33];
     }
 
+    // Compute contravariant metric tensor for SUPG
+    if (supg) {
+      for (unsigned i=0; i<3; ++i) {
+        for (unsigned j=0; j<3; ++j) {
+          Gc[i][j] = 0.0;
+          for (unsigned k=0; k<3; ++k)
+            Gc[i][j] += invJ[3*k+i]*invJ[3*k+j];
+        }
+      }
+    }
+
     return detJ ;
+  }
+
+  // Compute tau term for SUPG stabilization
+  KOKKOS_INLINE_FUNCTION
+  local_scalar_type computeTau(const double  Gc[3][3] ,
+                               const local_scalar_type  coeff_k ,
+                               const local_scalar_type  advection[]) const
+  {
+    local_scalar_type tau = 0.0;
+    double norm_Gc = 0.0;
+    for (unsigned i=0; i<3; ++i) {
+      for (unsigned j=0; j<3; ++j) {
+        tau += advection[i]*Gc[i][j]*advection[j];
+        norm_Gc += Gc[i][j]*Gc[i][j];
+      }
+    }
+    tau = 12.0*coeff_k*coeff_k*std::sqrt(norm_Gc);
+    tau = 1.0 / std::sqrt(tau);
+
+    return tau;
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -726,6 +762,7 @@ public:
     const double  dpsidy[] ,
     const double  dpsidz[] ,
     const double  detJ ,
+    const double  Gc[3][3] ,
     const double  integ_weight ,
     const double  bases_vals[] ,
     const local_scalar_type  coeff_k ,
@@ -757,6 +794,9 @@ public:
       advection[0]*gradx_at_pt +
       advection[1]*grady_at_pt +
       advection[2]*gradz_at_pt;
+
+    const local_scalar_type tau =
+      supg ? computeTau(Gc, coeff_k, advection) : local_scalar_type(0.0);
 
     for ( unsigned m = 0; m < FunctionCount; ++m) {
       local_scalar_type * const mat = elem_mat[m] ;
@@ -771,20 +811,35 @@ public:
                                     dpsidz_m * gradz_at_pt ) +
                         ( advection_term  + source_term ) * bases_val_m ) ;
 
+      local_scalar_type supg_term = 0.0;
+      if (supg) {
+        supg_term = detJ_weight * tau * ( advection[0] * dpsidx_m +
+                                          advection[1] * dpsidy_m +
+                                          advection[2] * dpsidz_m  );
+        elem_res[m] += supg_term * (advection_term + source_term);
+      }
+
       if (assemble_jacobian) {
         for( unsigned n = 0; n < FunctionCount; n++) {
+
+          const local_scalar_type advection_source_deriv =
+            advection[0] * dpsidx[n] +
+            advection[1] * dpsidy[n] +
+            advection[2] * dpsidz[n] +
+            source_deriv * bases_vals[n];
 
           mat[n] +=
             detJ_weight * ( coeff_k * ( dpsidx_m * dpsidx[n] +
                                         dpsidy_m * dpsidy[n] +
                                         dpsidz_m * dpsidz[n] ) +
-                            ( advection[0] * dpsidx[n] +
-                              advection[1] * dpsidy[n] +
-                              advection[2] * dpsidz[n] +
-                              source_deriv * bases_vals[n] ) * bases_val_m );
+                            advection_source_deriv * bases_val_m );
+
+          if (supg)
+            mat[n] += supg_term * advection_source_deriv;
         }
       }
     }
+
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -794,6 +849,7 @@ public:
     const double  dpsidy[] ,
     const double  dpsidz[] ,
     const double  detJ ,
+    const double  Gc[3][3] ,
     const double  integ_weight ,
     const double  bases_vals[] ,
     const local_scalar_type  coeff_k ,
@@ -826,6 +882,9 @@ public:
       advection[1]*grady_at_pt +
       advection[2]*gradz_at_pt;
 
+    const local_scalar_type tau =
+      supg ? computeTau(Gc, coeff_k, advection) : local_scalar_type(0.0);
+
     for ( unsigned m = 0; m < FunctionCount; ++m) {
       local_scalar_type * const mat = elem_mat[m] ;
       const double bases_val_m = bases_vals[m];
@@ -839,17 +898,31 @@ public:
                         coeff_k * dpsidz_m * gradz_at_pt +
                         ( advection_term  + source_term ) * bases_val_m ) ;
 
+      local_scalar_type supg_term = 0.0;
+      if (supg) {
+        supg_term = detJ_weight * tau * ( advection[0] * dpsidx_m +
+                                          advection[1] * dpsidy_m +
+                                          advection[2] * dpsidz_m  );
+        elem_res[m] += supg_term * (advection_term + source_term);
+      }
+
       if (assemble_jacobian) {
         for( unsigned n = 0; n < FunctionCount; n++) {
+
+          const local_scalar_type advection_source_deriv =
+            advection[0] * dpsidx[n] +
+            advection[1] * dpsidy[n] +
+            advection[2] * dpsidz[n] +
+            source_deriv * bases_vals[n];
 
           mat[n] +=
             detJ_weight * (            dpsidx_m * dpsidx[n] +
                                        dpsidy_m * dpsidy[n] +
                              coeff_k * dpsidz_m * dpsidz[n] +
-                             ( advection[0] * dpsidx[n] +
-                               advection[1] * dpsidy[n] +
-                               advection[2] * dpsidz[n] +
-                               source_deriv * bases_vals[n] ) * bases_val_m );
+                             advection_source_deriv * bases_val_m );
+
+          if (supg)
+            mat[n] += supg_term * advection_source_deriv;
         }
       }
     }
@@ -926,6 +999,8 @@ public:
       }
     }
 
+    double Gc[3][3];
+
     for ( unsigned i = 0 ; i < IntegrationCount ; ++i ) {
       double dpsidx[ FunctionCount ] ;
       double dpsidy[ FunctionCount ] ;
@@ -933,7 +1008,7 @@ public:
 
       const double detJ =
         transform_gradients( elem_data.gradients[i] , x , y , z ,
-                             dpsidx , dpsidy , dpsidz );
+                             dpsidx , dpsidy , dpsidz , Gc );
 
       // Compute physical coordinates of integration point
       double pt[] = { 0 , 0 , 0 } ;
@@ -954,12 +1029,12 @@ public:
                                         coeff_advection };
 
       if (isotropic)
-        contributeResidualJacobian( val , dpsidx , dpsidy , dpsidz , detJ ,
+        contributeResidualJacobian( val , dpsidx , dpsidy , dpsidz , detJ , Gc ,
                                     elem_data.weights[i] , elem_data.values[i] ,
                                     coeff_k , coeff_source , advection ,
                                     elem_vec , elem_mat );
       else
-        contributeResidualJacobianAnisotropic( val , dpsidx , dpsidy , dpsidz , detJ ,
+        contributeResidualJacobianAnisotropic( val , dpsidx , dpsidy , dpsidz , detJ , Gc ,
                                                elem_data.weights[i] , elem_data.values[i] ,
                                                coeff_k , coeff_source , advection ,
                                                elem_vec , elem_mat );

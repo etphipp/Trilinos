@@ -85,7 +85,7 @@ void run_samples(
             cmd.PRINT , cmd.USE_TRIALS , cmd.USE_ATOMIC ,
             cmd.USE_BELOS , cmd.USE_MUELU , cmd.USE_MEANBASED ,
             coeff_function , advection_function , cmd.USE_ISOTROPIC ,
-            cmd.USE_COEFF_SRC ,
+            cmd.USE_COEFF_SRC , cmd.USE_SUPG ,
             bc_lower_value , bc_upper_value ,
             response, response_gradient);
 
@@ -178,7 +178,7 @@ void run_samples(
             cmd.PRINT , cmd.USE_TRIALS , cmd.USE_ATOMIC ,
             cmd.USE_BELOS , cmd.USE_MUELU , cmd.USE_MEANBASED ,
             coeff_function , advection_function , cmd.USE_ISOTROPIC ,
-            cmd.USE_COEFF_SRC ,
+            cmd.USE_COEFF_SRC , cmd.USE_SUPG ,
             bc_lower_value , bc_upper_value ,
             response, response_gradient);
 

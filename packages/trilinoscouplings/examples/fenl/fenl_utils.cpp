@@ -103,6 +103,7 @@ clp_return_type parse_cmdline( int argc , char ** argv, CMD & cmdline,
   clp.setOption("grouping", &cmdline.USE_GROUPING, num_grouping_types, grouping_values, grouping_names, "Sample grouping method for ensemble propagation");
   clp.setOption("surrogate-grouping-level", &cmdline.TAS_GROUPING_INITIAL_LEVEL,  "Starting level for surrogate-based grouping");
 
+  clp.setOption("supg", "no-supg",       &cmdline.USE_SUPG ,  "use SUPG stabilization");
   clp.setOption("vtune", "no-vtune",       &cmdline.VTUNE ,  "connect to vtune");
   clp.setOption("verbose", "no-verbose",   &cmdline.VERBOSE, "print verbose intialization info");
   clp.setOption("print", "no-print",        &cmdline.PRINT,  "print detailed test output");
@@ -259,6 +260,9 @@ void print_cmdline( std::ostream & s , const CMD & cmd )
   if ( cmd.USE_MEANBASED  ) {
     s << " MEAN-BASED" ;
   }
+  if ( cmd.USE_SUPG  ) {
+    s << " SUPG" ;
+  }
   if ( cmd.VTUNE  ) {
     s << " VTUNE" ;
   }
@@ -311,6 +315,7 @@ print_headers( std::ostream & s , const CMD & cmd , const int comm_rank )
      else
        s << " ANISOTROPIC" ;
    }
+   if ( cmd.USE_SUPG ) { s << " , SUPG" ; }
 
    if ( cmd.USE_ATOMIC ) { s << " , USING ATOMICS" ; }
    if ( cmd.USE_BELOS  ) { s << " , USING BELOS" ; }
